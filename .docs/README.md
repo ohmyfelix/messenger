@@ -4,10 +4,9 @@ Integration of [Symfony Messenger](https://symfony.com/doc/current/messenger.htm
 
 ## Content
 
-- [Getting started](#getting-started)
-  - [Setup](#setup)
-  - [Configuration](#configuration)
-  - [Dependencies](#dependencies)
+- [Setup](#setup)
+- [Minimal configuration](#minimal-configuration)
+- [Full configuration](#full-configuration)
 - [Messages](#messages)
 - [Handlers](#handlers)
   - [Using attributes](#using-attributes)
@@ -53,9 +52,7 @@ Integration of [Symfony Messenger](https://symfony.com/doc/current/messenger.htm
 
 ---
 
-## Getting started
-
-### Setup
+## Setup
 
 Install the package using [Composer](https://getcomposer.org):
 
@@ -70,11 +67,38 @@ extensions:
     messenger: Contributte\Messenger\DI\MessengerExtension
 ```
 
-### Configuration
+This package works best with these additional Contributte packages:
 
-Here is a minimal working configuration:
+**Symfony Console** - provides console commands for consuming messages and managing transports:
+
+```bash
+composer require contributte/console
+```
 
 ```neon
+extensions:
+    console: Contributte\Console\DI\ConsoleExtension(%consoleMode%)
+```
+
+**Symfony EventDispatcher** - provides lifecycle events:
+
+```bash
+composer require contributte/event-dispatcher
+```
+
+```neon
+extensions:
+    events: Contributte\EventDispatcher\DI\EventDispatcherExtension
+```
+
+---
+
+## Minimal configuration
+
+```neon
+extensions:
+    messenger: Contributte\Messenger\DI\MessengerExtension
+
 messenger:
     transport:
         sync:
@@ -87,41 +111,82 @@ services:
     - App\Handler\SendEmailHandler
 ```
 
-> [!NOTE]
-> See the [full configuration example](#full-configuration-example) for all available options.
+---
 
-### Dependencies
-
-This package works best with these additional Contributte packages:
-
-#### Symfony Console
-
-The package provides console commands for consuming messages and managing transports. Install the [contributte/console](https://github.com/contributte/console) integration:
-
-```bash
-composer require contributte/console
-```
+## Full configuration
 
 ```neon
 extensions:
+    messenger: Contributte\Messenger\DI\MessengerExtension
     console: Contributte\Console\DI\ConsoleExtension(%consoleMode%)
-```
-
-After installation, run `bin/console` to see available messenger commands:
-
-![Console Commands](https://raw.githubusercontent.com/contributte/messenger/master/.docs/assets/console.png)
-
-#### Symfony EventDispatcher
-
-The package uses Symfony EventDispatcher for lifecycle events. Install the [contributte/event-dispatcher](https://github.com/contributte/event-dispatcher) integration:
-
-```bash
-composer require contributte/event-dispatcher
-```
-
-```neon
-extensions:
     events: Contributte\EventDispatcher\DI\EventDispatcherExtension
+
+messenger:
+    # Debug panel (requires Tracy)
+    debug:
+        panel: %debugMode%
+
+    # Message buses
+    bus:
+        messageBus:
+            autowired: true
+            defaultMiddlewares: true
+            allowNoHandlers: false
+            allowNoSenders: true
+            middlewares: []
+
+        commandBus:
+            wrapper: Contributte\Messenger\Bus\CommandBus
+
+        queryBus:
+            wrapper: Contributte\Messenger\Bus\QueryBus
+
+    # Serializers
+    serializer:
+        default: Symfony\Component\Messenger\Transport\Serialization\PhpSerializer
+
+    # Transport factories
+    transportFactory:
+        sync: Symfony\Component\Messenger\Transport\Sync\SyncTransportFactory
+        inMemory: Symfony\Component\Messenger\Transport\InMemory\InMemoryTransportFactory
+        redis: Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransportFactory
+
+    # Loggers
+    logger:
+        httpLogger: Psr\Log\NullLogger
+        consoleLogger: Symfony\Component\Console\Logger\ConsoleLogger
+
+    # Global failure transport
+    failureTransport: failed
+
+    # Transports
+    transport:
+        sync:
+            dsn: sync://
+
+        async:
+            dsn: redis://localhost:6379/messages
+            retryStrategy:
+                maxRetries: 3
+                delay: 1000
+                multiplier: 2
+                maxDelay: 60000
+            failureTransport: failed
+
+        failed:
+            dsn: doctrine://default?queue_name=failed
+
+    # Routing
+    routing:
+        App\Message\SendEmail: [async]
+        App\Message\SendSms: [async]
+        App\Message\LogEntry: [sync]
+        "*": [sync]
+
+services:
+    - App\Handler\SendEmailHandler
+    - App\Handler\SendSmsHandler
+    - App\Handler\LogEntryHandler
 ```
 
 ---
@@ -1071,84 +1136,6 @@ Assert::contains('Message handled', $logs[0]['message']);
 ---
 
 ## Examples
-
-### Full configuration example
-
-```neon
-extensions:
-    messenger: Contributte\Messenger\DI\MessengerExtension
-    console: Contributte\Console\DI\ConsoleExtension(%consoleMode%)
-    events: Contributte\EventDispatcher\DI\EventDispatcherExtension
-
-messenger:
-    # Debug panel (requires Tracy)
-    debug:
-        panel: %debugMode%
-
-    # Message buses
-    bus:
-        messageBus:
-            autowired: true
-            defaultMiddlewares: true
-            allowNoHandlers: false
-            allowNoSenders: true
-            middlewares: []
-
-        commandBus:
-            wrapper: Contributte\Messenger\Bus\CommandBus
-
-        queryBus:
-            wrapper: Contributte\Messenger\Bus\QueryBus
-
-    # Serializers
-    serializer:
-        default: Symfony\Component\Messenger\Transport\Serialization\PhpSerializer
-
-    # Transport factories
-    transportFactory:
-        sync: Symfony\Component\Messenger\Transport\Sync\SyncTransportFactory
-        inMemory: Symfony\Component\Messenger\Transport\InMemory\InMemoryTransportFactory
-        redis: Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransportFactory
-
-    # Loggers
-    logger:
-        httpLogger: Psr\Log\NullLogger
-        consoleLogger: Symfony\Component\Console\Logger\ConsoleLogger
-
-    # Global failure transport
-    failureTransport: failed
-
-    # Transports
-    transport:
-        sync:
-            dsn: sync://
-
-        async:
-            dsn: redis://localhost:6379/messages
-            retryStrategy:
-                maxRetries: 3
-                delay: 1000
-                multiplier: 2
-                maxDelay: 60000
-            failureTransport: failed
-
-        failed:
-            dsn: doctrine://default?queue_name=failed
-
-    # Routing
-    routing:
-        App\Message\SendEmail: [async]
-        App\Message\SendSms: [async]
-        App\Message\LogEntry: [sync]
-        "*": [sync]
-
-services:
-    - App\Handler\SendEmailHandler
-    - App\Handler\SendSmsHandler
-    - App\Handler\LogEntryHandler
-```
-
-### Skeleton projects
 
 - [contributte/messenger-skeleton](https://github.com/contributte/messenger-skeleton) - Minimal working example
 - [contributte/examples](https://contributte.org/examples.html) - More examples
