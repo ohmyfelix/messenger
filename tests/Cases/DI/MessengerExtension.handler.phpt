@@ -313,8 +313,9 @@ function getHandlerDescriptor(NetteContainer $container, object $message, string
 {
 	/** @var HandlersLocatorInterface $handlerLocator */
 	$handlerLocator = $container->getByName(sprintf('messenger.bus.%s.locator', $busName));
+	$handlers = iterator_to_array($handlerLocator->getHandlers(new Envelope($message)));
 	/** @var HandlerDescriptor $handlerDescriptor */
-	$handlerDescriptor = $handlerLocator->getHandlers(new Envelope($message))[0] ?? null;
+	$handlerDescriptor = $handlers[0] ?? null;
 	Assert::notNull($handlerDescriptor);
 
 	return $handlerDescriptor;

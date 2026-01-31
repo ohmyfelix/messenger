@@ -34,45 +34,44 @@ class LoggerPass extends AbstractPass
 		$builder = $this->getContainerBuilder();
 		$config = $this->getConfig();
 
-		$logger = $builder->getByType(LoggerInterface::class);
+		$existingLogger = $builder->getByType(LoggerInterface::class);
 
-		// Register or resolve http logger
-		if ($config->logger->httpLogger !== null) {
-			$httpLogger = $builder->addDefinition($this->prefix('logger.httpLogger'))
-				->setFactory($config->logger->httpLogger)
-				->setAutowired(false);
-		} elseif ($logger !== null) {
-			$httpLogger = $builder->addDefinition($this->prefix('logger.httpLogger'))
-				->setFactory('@' . $logger)
-				->setAutowired(false);
-		} else {
-			$httpLogger = $builder->addDefinition($this->prefix('logger.httpLogger'))
-				->setFactory(NullLogger::class)
-				->setAutowired(false);
-		}
+		$httpLogger = $this->createLogger(
+			'logger.httpLogger',
+			$config->logger->httpLogger,
+			$existingLogger,
+			NullLogger::class
+		);
 
-		// Register or resolve console logger
-		if ($config->logger->consoleLogger !== null) {
-			$consoleLogger = $builder->addDefinition($this->prefix('logger.consoleLogger'))
-				->setFactory($config->logger->consoleLogger)
-				->setAutowired(false);
-		} elseif ($logger !== null) {
-			$consoleLogger = $builder->addDefinition($this->prefix('logger.consoleLogger'))
-				->setFactory('@' . $logger)
-				->setAutowired(false);
-		} else {
-			$consoleLogger = $builder->addDefinition($this->prefix('logger.consoleLogger'))
-				->setFactory(ConsoleLogger::class, [
-					new Statement(ConsoleOutput::class, [
-						OutputInterface::VERBOSITY_VERY_VERBOSE,
-					]),
-				])
-				->setAutowired(false);
-		}
+		$consoleLogger = $this->createLogger(
+			'logger.consoleLogger',
+			$config->logger->consoleLogger,
+			$existingLogger,
+			new Statement(ConsoleLogger::class, [
+				new Statement(ConsoleOutput::class, [OutputInterface::VERBOSITY_VERY_VERBOSE]),
+			])
+		);
 
 		/** @var ServiceDefinition $loggerDef */
 		$loggerDef = $builder->getDefinition($this->prefix('logger.logger'));
 		$loggerDef->setArguments([$httpLogger, $consoleLogger]);
+	}
+
+	private function createLogger(
+		string $name,
+		string|Statement|null $configLogger,
+		?string $existingLogger,
+		string|Statement $fallback
+	): ServiceDefinition {
+		$builder = $this->getContainerBuilder();
+
+		$factory = $configLogger
+			?? ($existingLogger !== null ? '@' . $existingLogger : null)
+			?? $fallback;
+
+		return $builder->addDefinition($this->prefix($name))
+			->setFactory($factory)
+			->setAutowired(false);
 	}
 
 }
